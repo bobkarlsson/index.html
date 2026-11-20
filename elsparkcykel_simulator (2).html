@@ -1,0 +1,2227 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Elsparkcykel Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+        }
+        #game-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.78);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.22);
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(56, 189, 248, 0.5);
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 3D Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Interaktionsprompt i mitten nedtill (döljs automatiskt under körning) -->
+    <div id="interact-prompt" class="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 glass-panel rounded-2xl px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-xl transition-opacity duration-200 pointer-events-none z-10">
+        Tryck <span class="text-sky-400 font-black">[F]</span> för att hoppa på Dualtron Thunder 2
+    </div>
+
+    <!-- Notis / Feedback-banner -->
+    <div id="toast-banner" class="fixed top-6 right-4 glass-panel rounded-xl px-4 py-2 text-xs font-bold text-emerald-300 shadow-lg opacity-0 transition-opacity duration-300 pointer-events-none z-20">
+        Dualtron Thunder 2 redo!
+    </div>
+
+    <!-- Touch-kontroller för mobil & surfplatta -->
+    <div class="fixed bottom-3 left-3 right-3 flex justify-between items-end md:hidden z-10 pointer-events-none">
+        <div class="flex gap-2 pointer-events-auto">
+            <button id="touch-left" class="glass-panel active:bg-sky-500/40 text-white font-black w-14 h-14 rounded-2xl flex items-center justify-center text-lg shadow-lg">◀</button>
+            <button id="touch-right" class="glass-panel active:bg-sky-500/40 text-white font-black w-14 h-14 rounded-2xl flex items-center justify-center text-lg shadow-lg">▶</button>
+        </div>
+        <div class="flex gap-1.5 pointer-events-auto">
+            <button id="touch-cam" class="glass-panel active:bg-sky-500/40 text-sky-300 font-black px-2.5 h-12 rounded-2xl text-xs shadow-lg">V</button>
+            <button id="touch-mount" class="glass-panel active:bg-emerald-500/40 text-emerald-300 font-black px-2.5 h-12 rounded-2xl text-xs shadow-lg">F</button>
+            <button id="touch-trick" class="glass-panel active:bg-amber-500/40 text-amber-300 font-black px-2.5 h-12 rounded-2xl text-xs shadow-lg">C</button>
+            <button id="touch-jump" class="glass-panel active:bg-sky-500/40 text-sky-300 font-black px-2.5 h-12 rounded-2xl text-xs shadow-lg">Hopp</button>
+            <button id="touch-wheelie" class="glass-panel active:bg-purple-500/40 text-purple-300 font-black px-2.5 h-12 rounded-2xl text-xs shadow-lg">Shift</button>
+        </div>
+        <div class="flex gap-2 pointer-events-auto">
+            <button id="touch-brake" class="glass-panel active:bg-rose-500/40 text-rose-300 font-black w-14 h-14 rounded-2xl flex items-center justify-center text-xs shadow-lg">Broms</button>
+            <button id="touch-gas" class="glass-panel active:bg-emerald-500/40 text-emerald-300 font-black w-14 h-14 rounded-2xl flex items-center justify-center text-xs shadow-lg">Gas</button>
+        </div>
+    </div>
+
+    <!-- Butik & Trim-modal -->
+    <div id="shop-modal" class="fixed inset-0 bg-slate-950/75 backdrop-blur-sm hidden items-center justify-center p-4 z-30">
+        <div class="glass-panel w-full max-w-2xl rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-700/70 max-h-[88vh] flex flex-col">
+            <div class="flex items-center justify-between pb-4 border-b border-slate-700/60">
+                <div>
+                    <h2 class="text-lg sm:text-xl font-black text-white tracking-tight">Dualtron Thunder 2 Tuning</h2>
+                    <p class="text-xs text-slate-400">72V 40Ah Minimotors • Alla inställningar & trim är gratis (0 kr)</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="bg-slate-900/90 border border-slate-700 px-3 py-1.5 rounded-xl text-right">
+                        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Toppfart</div>
+                        <div id="shop-stat-topspeed" class="text-sm font-black text-rose-400">233 km/h</div>
+                    </div>
+                    <button id="btn-shop-close" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold w-9 h-9 rounded-xl flex items-center justify-center transition cursor-pointer">✕</button>
+                </div>
+            </div>
+
+            <div class="overflow-y-auto pr-1 py-4 space-y-5">
+                <div>
+                    <h3 class="text-xs font-black uppercase tracking-wider text-rose-400 mb-2.5">72V 40Ah Effektläge</h3>
+                    <div id="shop-models-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-2.5"></div>
+                </div>
+
+                <div>
+                    <h3 class="text-xs font-black uppercase tracking-wider text-sky-400 mb-2.5">LED-belysning & Fjädring</h3>
+                    <div id="shop-upgrades-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. SPELDATA & DUALTRON THUNDER 2 TUNING
+        // ==========================================
+        const POWER_TUNES = [
+            {
+                id: 'stage3',
+                name: 'Stage 3 Hyper (72V)',
+                desc: 'Full Dual 10080W effekt, 233 km/h toppfart.',
+                baseKmh: 233,
+                accel: 52,
+                modeNum: '3'
+            },
+            {
+                id: 'stage2',
+                name: 'Stage 2 Sport (72V)',
+                desc: 'Snabb gatutrim med kontrollerad gasrespons.',
+                baseKmh: 165,
+                accel: 38,
+                modeNum: '2'
+            },
+            {
+                id: 'stage1',
+                name: 'Stage 1 Street',
+                desc: 'Smidig stadskörning med mjuk kurva.',
+                baseKmh: 95,
+                accel: 24,
+                modeNum: '1'
+            }
+        ];
+
+        const LED_THEMES = [
+            { id: 'thunder', name: 'Thunder Red & White', hex: 0xef4444, css: '#ef4444' },
+            { id: 'cyan', name: 'Minimotors Ice Cyan', hex: 0x38bdf8, css: '#38bdf8' },
+            { id: 'emerald', name: 'Toxic Emerald RGB', hex: 0x10b981, css: '#10b981' },
+            { id: 'purple', name: 'Ultraviolet Glow', hex: 0xa855f7, css: '#a855f7' },
+            { id: 'stealth', name: 'Stealth Blackout', hex: 0x1e293b, css: '#64748b' }
+        ];
+
+        const SUSPENSION_MODES = [
+            { id: 'sport', name: 'C-Torsion Street Sport', desc: 'Balanserad kurvtagning & stabil stegring', gripBonus: 1.0 },
+            { id: 'track', name: 'Track Stiff Cartridge', desc: 'Extra vass styrrespons i 200+ km/h', gripBonus: 1.15 },
+            { id: 'wheelie', name: 'Plush Stunt Balance', desc: 'Mjuk bakfjädring för långa wheelies', gripBonus: 0.95 }
+        ];
+
+        const state = {
+            powerTuneIndex: 0,
+            ledThemeIndex: 0,
+            suspensionIndex: 0
+        };
+
+        function getCurrentStats() {
+            const tune = POWER_TUNES[state.powerTuneIndex] || POWER_TUNES[0];
+            const led = LED_THEMES[state.ledThemeIndex] || LED_THEMES[0];
+            const susp = SUSPENSION_MODES[state.suspensionIndex] || SUSPENSION_MODES[0];
+            return {
+                modelName: 'Dualtron Thunder 2',
+                tuneName: tune.name,
+                modeNum: tune.modeNum,
+                maxKmh: tune.baseKmh,
+                maxSpeedMs: tune.baseKmh / 3.6,
+                accel: tune.accel,
+                ledColor: led.hex,
+                ledCss: led.css,
+                ledName: led.name,
+                suspensionName: susp.name,
+                gripBonus: susp.gripBonus
+            };
+        }
+
+        // ==========================================
+        // 2. THREE.JS SCEN, LJUS & BUTIK + MOTORVÄG
+        // ==========================================
+        const canvas = document.getElementById('game-canvas');
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x7dd3fc);
+        scene.fog = new THREE.FogExp2(0xbae6fd, 0.0014);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.08, 1200);
+
+        const hemiLight = new THREE.HemisphereLight(0xf0f9ff, 0x334155, 0.95);
+        scene.add(hemiLight);
+
+        const dirLight = new THREE.DirectionalLight(0xfffbeb, 1.15);
+        dirLight.position.set(45, 85, 35);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 1;
+        dirLight.shadow.camera.far = 250;
+        const d = 60;
+        dirLight.shadow.camera.left = -d;
+        dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d;
+        dirLight.shadow.camera.bottom = -d;
+        scene.add(dirLight);
+
+        // Mark & Gräs
+        const groundGeo = new THREE.PlaneGeometry(600, 3200);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x3f6212, roughness: 0.92 });
+        const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+        groundMesh.rotation.x = -Math.PI / 2;
+        groundMesh.position.set(0, -0.02, -1350);
+        groundMesh.receiveShadow = true;
+        scene.add(groundMesh);
+
+        // Motorväg (2,7 km lång raksträcka + anslutning till butiken)
+        const ROAD_WIDTH = 16;
+        const ROAD_LENGTH = 2850;
+        const roadGeo = new THREE.PlaneGeometry(ROAD_WIDTH, ROAD_LENGTH);
+        const roadMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.78, metalness: 0.08 });
+        const roadMesh = new THREE.Mesh(roadGeo, roadMat);
+        roadMesh.rotation.x = -Math.PI / 2;
+        roadMesh.position.set(0, 0.0, -1340);
+        roadMesh.receiveShadow = true;
+        scene.add(roadMesh);
+
+        // Vägmarkeringar & Räcken
+        const lineMat = new THREE.MeshBasicMaterial({ color: 0xf8fafc });
+        const edgeMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
+        const leftEdge = new THREE.Mesh(new THREE.PlaneGeometry(0.22, ROAD_LENGTH), edgeMat);
+        leftEdge.rotation.x = -Math.PI / 2;
+        leftEdge.position.set(-ROAD_WIDTH / 2 + 0.5, 0.01, -1340);
+        scene.add(leftEdge);
+
+        const rightEdge = new THREE.Mesh(new THREE.PlaneGeometry(0.22, ROAD_LENGTH), edgeMat);
+        rightEdge.rotation.x = -Math.PI / 2;
+        rightEdge.position.set(ROAD_WIDTH / 2 - 0.5, 0.01, -1340);
+        scene.add(rightEdge);
+
+        const railGeo = new THREE.BoxGeometry(0.18, 0.55, ROAD_LENGTH);
+        const railMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.6, roughness: 0.35 });
+        const leftRail = new THREE.Mesh(railGeo, railMat);
+        leftRail.position.set(-ROAD_WIDTH / 2 - 0.6, 0.45, -1340);
+        scene.add(leftRail);
+
+        const rightRail = new THREE.Mesh(railGeo, railMat);
+        rightRail.position.set(ROAD_WIDTH / 2 + 0.6, 0.45, -1340);
+        scene.add(rightRail);
+
+        // Streckad mittlinje & lyktstolpar
+        const dashGeo = new THREE.PlaneGeometry(0.2, 4.5);
+        const poleGeo = new THREE.CylinderGeometry(0.09, 0.12, 7.5, 8);
+        const poleMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.5 });
+        const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+
+        for (let z = 30; z > -2720; z -= 14) {
+            const dash = new THREE.Mesh(dashGeo, lineMat);
+            dash.rotation.x = -Math.PI / 2;
+            dash.position.set(0, 0.01, z);
+            scene.add(dash);
+
+            if (Math.abs(z) % 42 === 0 && z < -20) {
+                [-1, 1].forEach(side => {
+                    const pole = new THREE.Mesh(poleGeo, poleMat);
+                    pole.position.set(side * (ROAD_WIDTH / 2 + 1.2), 3.75, z);
+                    scene.add(pole);
+
+                    const arm = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.1), poleMat);
+                    arm.position.set(side * (ROAD_WIDTH / 2 + 0.5), 7.4, z);
+                    scene.add(arm);
+
+                    const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.12, 0.24), bulbMat);
+                    bulb.position.set(side * (ROAD_WIDTH / 2 - 0.1), 7.32, z);
+                    scene.add(bulb);
+                });
+            }
+        }
+
+        // Ändbarriär vid slutet av motorvägen (z = -2740)
+        const endBarrier = new THREE.Mesh(
+            new THREE.BoxGeometry(ROAD_WIDTH + 1.2, 1.1, 0.5),
+            new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.4, metalness: 0.3 })
+        );
+        endBarrier.position.set(0, 0.55, -2740);
+        scene.add(endBarrier);
+
+        // Motorvägsportaler & avståndsskyltar längs 2,7 km-sträckan
+        const gantryMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.65, roughness: 0.35 });
+        const highwaySignCanvas = document.createElement('canvas');
+        highwaySignCanvas.width = 512;
+        highwaySignCanvas.height = 128;
+        const hsCtx = highwaySignCanvas.getContext('2d');
+        hsCtx.fillStyle = '#0369a1';
+        hsCtx.fillRect(0, 0, 512, 128);
+        hsCtx.strokeStyle = '#f8fafc';
+        hsCtx.lineWidth = 6;
+        hsCtx.strokeRect(6, 6, 500, 116);
+        hsCtx.fillStyle = '#ffffff';
+        hsCtx.font = '900 34px Inter, sans-serif';
+        hsCtx.textAlign = 'center';
+        hsCtx.textBaseline = 'middle';
+        hsCtx.fillText('E6 MOTORVÄG  ▲  2.7 KM', 256, 64);
+        const highwaySignTex = new THREE.CanvasTexture(highwaySignCanvas);
+
+        [-320, -960, -1680, -2350].forEach(gz => {
+            [-1, 1].forEach(side => {
+                const post = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 6.8, 10), gantryMat);
+                post.position.set(side * (ROAD_WIDTH / 2 + 1.1), 3.4, gz);
+                scene.add(post);
+            });
+            const beam = new THREE.Mesh(new THREE.BoxGeometry(ROAD_WIDTH + 2.4, 0.24, 0.24), gantryMat);
+            beam.position.set(0, 6.7, gz);
+            scene.add(beam);
+
+            const signBoard = new THREE.Mesh(
+                new THREE.PlaneGeometry(5.6, 1.35),
+                new THREE.MeshBasicMaterial({ map: highwaySignTex })
+            );
+            signBoard.position.set(0, 6.0, gz + 0.14);
+            scene.add(signBoard);
+        });
+
+        // Horisontsilhuett (kullar i fjärran)
+        const hillMat = new THREE.MeshStandardMaterial({ color: 0x365314, roughness: 0.95 });
+        for (let i = 0; i < 28; i++) {
+            const side = i % 2 === 0 ? -1 : 1;
+            const hz = -80 - i * 95;
+            const hx = side * (65 + (i % 5) * 28);
+            const hRadius = 26 + (i % 4) * 14;
+            const hill = new THREE.Mesh(new THREE.ConeGeometry(hRadius, 18 + (i % 3) * 10, 8), hillMat);
+            hill.position.set(hx, 7, hz);
+            scene.add(hill);
+        }
+
+        // ==========================================
+        // 3. DUALTRON TUNING SHOP (STARTPLATS)
+        // ==========================================
+        const shopGroup = new THREE.Group();
+        shopGroup.position.set(0, 0, 26);
+        scene.add(shopGroup);
+
+        const shopFloor = new THREE.Mesh(
+            new THREE.PlaneGeometry(18, 18),
+            new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.28, metalness: 0.3 })
+        );
+        shopFloor.rotation.x = -Math.PI / 2;
+        shopFloor.position.y = 0.015;
+        shopFloor.receiveShadow = true;
+        shopGroup.add(shopFloor);
+
+        const shopNeonMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+        [-7.5, 7.5].forEach(xPos => {
+            const strip = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 17), shopNeonMat);
+            strip.rotation.x = -Math.PI / 2;
+            strip.position.set(xPos, 0.02, 0);
+            shopGroup.add(strip);
+        });
+
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.72 });
+        const backWall = new THREE.Mesh(new THREE.BoxGeometry(18.4, 5.5, 0.4), wallMat);
+        backWall.position.set(0, 2.75, 9);
+        shopGroup.add(backWall);
+
+        const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 5.5, 18), wallMat);
+        leftWall.position.set(-9, 2.75, 0);
+        shopGroup.add(leftWall);
+
+        const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 5.5, 18), wallMat);
+        rightWall.position.set(9, 2.75, 0);
+        shopGroup.add(rightWall);
+
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(18.6, 0.4, 18.6), wallMat);
+        roof.position.set(0, 5.6, 0);
+        shopGroup.add(roof);
+
+        const signCanvas = document.createElement('canvas');
+        signCanvas.width = 512;
+        signCanvas.height = 96;
+        const signCtx = signCanvas.getContext('2d');
+        signCtx.fillStyle = '#09090b';
+        signCtx.fillRect(0, 0, 512, 96);
+        signCtx.strokeStyle = '#ef4444';
+        signCtx.lineWidth = 6;
+        signCtx.strokeRect(4, 4, 504, 88);
+        signCtx.fillStyle = '#f8fafc';
+        signCtx.font = '900 34px Inter, sans-serif';
+        signCtx.textAlign = 'center';
+        signCtx.textBaseline = 'middle';
+        signCtx.fillText('MINIMOTORS • DUALTRON SHOP', 256, 48);
+
+        const signTex = new THREE.CanvasTexture(signCanvas);
+        const signMesh = new THREE.Mesh(
+            new THREE.PlaneGeometry(8.8, 1.5),
+            new THREE.MeshBasicMaterial({ map: signTex })
+        );
+        signMesh.position.set(0, 4.6, -9.05);
+        signMesh.rotation.y = Math.PI;
+        shopGroup.add(signMesh);
+
+        const podiumMat = new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.35, metalness: 0.55 });
+        const shopStations = [
+            { id: 'led', localX: -5.2, localZ: -2.4, color: 0xef4444, title: 'RGB DECK LED' },
+            { id: 'suspension', localX: 5.2, localZ: -2.4, color: 0x38bdf8, title: 'C-SUSPENSION' },
+            { id: 'power', localX: -5.2, localZ: 3.4, color: 0x10b981, title: '72V POWER TUNE' }
+        ];
+
+        shopStations.forEach((st) => {
+            const podium = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.3, 0.24, 24), podiumMat);
+            podium.position.set(st.localX, 0.12, st.localZ);
+            shopGroup.add(podium);
+
+            const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 1.05, 16), podiumMat);
+            pillar.position.set(st.localX, 0.64, st.localZ);
+            shopGroup.add(pillar);
+
+            const ring = new THREE.Mesh(
+                new THREE.RingGeometry(1.1, 1.22, 24),
+                new THREE.MeshBasicMaterial({ color: st.color, side: THREE.DoubleSide })
+            );
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.set(st.localX, 0.25, st.localZ);
+            shopGroup.add(ring);
+
+            const stCanvas = document.createElement('canvas');
+            stCanvas.width = 256;
+            stCanvas.height = 64;
+            const stCtx = stCanvas.getContext('2d');
+            stCtx.fillStyle = '#09090b';
+            stCtx.fillRect(0, 0, 256, 64);
+            stCtx.strokeStyle = '#' + st.color.toString(16).padStart(6, '0');
+            stCtx.lineWidth = 4;
+            stCtx.strokeRect(3, 3, 250, 58);
+            stCtx.fillStyle = '#ffffff';
+            stCtx.font = '900 22px Inter, sans-serif';
+            stCtx.textAlign = 'center';
+            stCtx.textBaseline = 'middle';
+            stCtx.fillText(st.title, 128, 32);
+
+            const stBoard = new THREE.Mesh(
+                new THREE.PlaneGeometry(1.1, 0.28),
+                new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(stCanvas), side: THREE.DoubleSide })
+            );
+            stBoard.position.set(st.localX, 1.35, st.localZ);
+            stBoard.rotation.y = st.localX < 0 ? Math.PI / 4 : -Math.PI / 4;
+            shopGroup.add(stBoard);
+        });
+
+        const shopLight = new THREE.PointLight(0xf8fafc, 1.35, 28);
+        shopLight.position.set(0, 4.8, 0);
+        shopGroup.add(shopLight);
+
+        // ==========================================
+        // 4. DUALTRON THUNDER 2 (3D-MODELL & EY3 LCD)
+        // ==========================================
+        const scooterRoot = new THREE.Group();
+        scene.add(scooterRoot);
+
+        const REAR_AXLE_Y = 0.175;
+        const REAR_AXLE_Z = 0.56;
+        const wheeliePivot = new THREE.Group();
+        wheeliePivot.position.set(0, REAR_AXLE_Y, REAR_AXLE_Z);
+        scooterRoot.add(wheeliePivot);
+
+        const matteBlackMat = new THREE.MeshStandardMaterial({ color: 0x111113, roughness: 0.42, metalness: 0.68 });
+        const anodizedBlackMat = new THREE.MeshStandardMaterial({ color: 0x1c1c20, roughness: 0.30, metalness: 0.82 });
+        const redAnodizedMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.28, metalness: 0.72 });
+        const brushedSilverMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, roughness: 0.24, metalness: 0.88 });
+        const accentMat = new THREE.MeshStandardMaterial({
+            color: 0xef4444,
+            emissive: 0xef4444,
+            emissiveIntensity: 0.75,
+            roughness: 0.25
+        });
+        const tireMat = new THREE.MeshStandardMaterial({ color: 0x0b0d12, roughness: 0.86 });
+        const rubberGripMat = new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.92 });
+
+        // 1) Deck Top Grip Pad ("MINIMOTORS" + "THUNDER II")
+        const deckTopCanvas = document.createElement('canvas');
+        deckTopCanvas.width = 512;
+        deckTopCanvas.height = 1024;
+        const dtCtx = deckTopCanvas.getContext('2d');
+        dtCtx.fillStyle = '#121316';
+        dtCtx.fillRect(0, 0, 512, 1024);
+        dtCtx.fillStyle = '#1b1d22';
+        for (let gy = 40; gy < 984; gy += 28) {
+            for (let gx = 36; gx < 476; gx += 28) {
+                dtCtx.fillRect(gx, gy, 10, 10);
+            }
+        }
+        dtCtx.strokeStyle = '#27272a';
+        dtCtx.lineWidth = 8;
+        dtCtx.strokeRect(18, 22, 476, 980);
+        dtCtx.save();
+        dtCtx.translate(235, 512);
+        dtCtx.rotate(-Math.PI / 2);
+        dtCtx.fillStyle = '#f8fafc';
+        dtCtx.font = '900 54px Inter, sans-serif';
+        dtCtx.textAlign = 'center';
+        dtCtx.fillText('MINIMOTORS', 0, -14);
+        dtCtx.fillStyle = '#ef4444';
+        dtCtx.font = '900 32px Inter, sans-serif';
+        dtCtx.fillText('THUNDER II', 0, 34);
+        dtCtx.restore();
+        const deckTopTex = new THREE.CanvasTexture(deckTopCanvas);
+
+        // 2) Side Rail Decal ("DUALTRON THUNDER II")
+        const sideDecalCanvas = document.createElement('canvas');
+        sideDecalCanvas.width = 512;
+        sideDecalCanvas.height = 64;
+        const sdCtx = sideDecalCanvas.getContext('2d');
+        sdCtx.fillStyle = '#111113';
+        sdCtx.fillRect(0, 0, 512, 64);
+        sdCtx.fillStyle = '#f8fafc';
+        sdCtx.font = '900 26px Inter, sans-serif';
+        sdCtx.textAlign = 'center';
+        sdCtx.textBaseline = 'middle';
+        sdCtx.fillText('DUALTRON', 175, 33);
+        sdCtx.fillStyle = '#ef4444';
+        sdCtx.font = '800 20px Inter, sans-serif';
+        sdCtx.fillText('THUNDER II', 360, 33);
+        const sideDecalTex = new THREE.CanvasTexture(sideDecalCanvas);
+
+        // 3) Rear Kicktail Top Emblem (Minimotors kvadratisk "D"-logga)
+        const kicktailCanvas = document.createElement('canvas');
+        kicktailCanvas.width = 256;
+        kicktailCanvas.height = 256;
+        const ktCtx = kicktailCanvas.getContext('2d');
+        ktCtx.fillStyle = '#141518';
+        ktCtx.fillRect(0, 0, 256, 256);
+        ktCtx.strokeStyle = '#e5e7eb';
+        ktCtx.lineWidth = 14;
+        ktCtx.strokeRect(48, 48, 160, 160);
+        ktCtx.fillStyle = '#f8fafc';
+        ktCtx.font = '900 108px Inter, sans-serif';
+        ktCtx.textAlign = 'center';
+        ktCtx.textBaseline = 'middle';
+        ktCtx.fillText('D', 128, 134);
+        const kicktailTex = new THREE.CanvasTexture(kicktailCanvas);
+
+        // 4) Stem Vertical Decal ("DUALTRON")
+        const stemDecalCanvas = document.createElement('canvas');
+        stemDecalCanvas.width = 128;
+        stemDecalCanvas.height = 512;
+        const stDecCtx = stemDecalCanvas.getContext('2d');
+        stDecCtx.fillStyle = '#111113';
+        stDecCtx.fillRect(0, 0, 128, 512);
+        stDecCtx.save();
+        stDecCtx.translate(64, 256);
+        stDecCtx.rotate(Math.PI / 2);
+        stDecCtx.fillStyle = '#f8fafc';
+        stDecCtx.font = '900 44px Inter, sans-serif';
+        stDecCtx.textAlign = 'center';
+        stDecCtx.textBaseline = 'middle';
+        stDecCtx.fillText('DUALTRON', 0, 0);
+        stDecCtx.restore();
+        const stemDecalTex = new THREE.CanvasTexture(stemDecalCanvas);
+
+        // 5) Hub Motor Rim Ring ("MINIMOTORS")
+        const rimRingCanvas = document.createElement('canvas');
+        rimRingCanvas.width = 256;
+        rimRingCanvas.height = 256;
+        const rrCtx = rimRingCanvas.getContext('2d');
+        rrCtx.fillStyle = '#0d0e11';
+        rrCtx.beginPath();
+        rrCtx.arc(128, 128, 126, 0, Math.PI * 2);
+        rrCtx.fill();
+        rrCtx.strokeStyle = '#ffffff';
+        rrCtx.lineWidth = 14;
+        rrCtx.beginPath();
+        rrCtx.arc(128, 128, 111, 0, Math.PI * 2);
+        rrCtx.stroke();
+        rrCtx.strokeStyle = '#e5e7eb';
+        rrCtx.lineWidth = 3;
+        rrCtx.beginPath();
+        rrCtx.arc(128, 128, 92, 0, Math.PI * 2);
+        rrCtx.stroke();
+        rrCtx.fillStyle = '#ffffff';
+        rrCtx.font = '900 21px Inter, sans-serif';
+        rrCtx.textAlign = 'center';
+        rrCtx.textBaseline = 'middle';
+        rrCtx.fillText('MINIMOTORS', 128, 112);
+        rrCtx.fillStyle = '#d1d5db';
+        rrCtx.font = '700 14px Inter, sans-serif';
+        rrCtx.fillText('72V HUB MOTOR', 128, 142);
+        const rimRingTex = new THREE.CanvasTexture(rimRingCanvas);
+
+        // 6) Torsion Cartridge Cap ("DUALTRON")
+        const capCanvas = document.createElement('canvas');
+        capCanvas.width = 128;
+        capCanvas.height = 128;
+        const capCtx = capCanvas.getContext('2d');
+        capCtx.fillStyle = '#18181b';
+        capCtx.beginPath();
+        capCtx.arc(64, 64, 62, 0, Math.PI * 2);
+        capCtx.fill();
+        capCtx.strokeStyle = '#e5e7eb';
+        capCtx.lineWidth = 7;
+        capCtx.beginPath();
+        capCtx.arc(64, 64, 52, 0, Math.PI * 2);
+        capCtx.stroke();
+        capCtx.fillStyle = '#f8fafc';
+        capCtx.font = '900 16px Inter, sans-serif';
+        capCtx.textAlign = 'center';
+        capCtx.textBaseline = 'middle';
+        capCtx.fillText('DUALTRON', 64, 64);
+        const capTex = new THREE.CanvasTexture(capCanvas);
+
+        function createDualtronWheel() {
+            const wGroup = new THREE.Group();
+            const tireRadius = 0.175;
+            const tireWidth = 0.114;
+
+            const tireCylinder = new THREE.Mesh(
+                new THREE.CylinderGeometry(tireRadius, tireRadius, tireWidth, 32).rotateZ(Math.PI / 2),
+                tireMat
+            );
+            wGroup.add(tireCylinder);
+
+            [-0.047, 0.047].forEach(xOff => {
+                const shoulder = new THREE.Mesh(
+                    new THREE.TorusGeometry(tireRadius - 0.012, 0.015, 12, 32).rotateY(Math.PI / 2),
+                    tireMat
+                );
+                shoulder.position.x = xOff;
+                wGroup.add(shoulder);
+            });
+
+            [-0.022, 0.022].forEach(xOff => {
+                const treadGroove = new THREE.Mesh(
+                    new THREE.TorusGeometry(tireRadius + 0.0008, 0.003, 8, 32).rotateY(Math.PI / 2),
+                    new THREE.MeshStandardMaterial({ color: 0x050608, roughness: 0.95 })
+                );
+                treadGroove.position.x = xOff;
+                wGroup.add(treadGroove);
+            });
+
+            const hubCore = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.108, 0.108, tireWidth + 0.004, 24).rotateZ(Math.PI / 2),
+                anodizedBlackMat
+            );
+            wGroup.add(hubCore);
+
+            [-1, 1].forEach(side => {
+                const rimBadge = new THREE.Mesh(
+                    new THREE.CircleGeometry(0.105, 24),
+                    new THREE.MeshBasicMaterial({ map: rimRingTex })
+                );
+                rimBadge.rotation.y = side === 1 ? Math.PI / 2 : -Math.PI / 2;
+                rimBadge.position.x = side * (tireWidth / 2 + 0.003);
+                wGroup.add(rimBadge);
+
+                const axleNut = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.016, 0.016, 0.014, 6).rotateZ(Math.PI / 2),
+                    brushedSilverMat
+                );
+                axleNut.position.x = side * (tireWidth / 2 + 0.024);
+                wGroup.add(axleNut);
+            });
+
+            // Ventilerad bromsskiva i borstat stål
+            const rotor = new THREE.Mesh(
+                new THREE.RingGeometry(0.052, 0.092, 24),
+                brushedSilverMat
+            );
+            rotor.rotation.y = -Math.PI / 2;
+            rotor.position.x = -tireWidth / 2 - 0.014;
+            wGroup.add(rotor);
+
+            for (let s = 0; s < 6; s++) {
+                const spokeAngle = (s / 6) * Math.PI * 2;
+                const rotorSpoke = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.004, 0.044, 0.011),
+                    brushedSilverMat
+                );
+                rotorSpoke.position.set(
+                    -tireWidth / 2 - 0.014,
+                    Math.cos(spokeAngle) * 0.044,
+                    Math.sin(spokeAngle) * 0.044
+                );
+                rotorSpoke.rotation.x = spokeAngle;
+                wGroup.add(rotorSpoke);
+            }
+
+            const rotorInner = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.032, 0.032, 0.007, 16).rotateZ(Math.PI / 2),
+                anodizedBlackMat
+            );
+            rotorInner.position.x = -tireWidth / 2 - 0.013;
+            wGroup.add(rotorInner);
+
+            return wGroup;
+        }
+
+        const rearWheelMesh = createDualtronWheel();
+        wheeliePivot.add(rearWheelMesh);
+
+        // Bakre C-fjädring (höjd så den har tydligt luftgap ovanför bakhjulet, utan stänkskärm)
+        const rearSuspensionGroup = new THREE.Group();
+        wheeliePivot.add(rearSuspensionGroup);
+
+        [-0.084, 0.084].forEach(sideX => {
+            const swingarm = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.040, 0.255), matteBlackMat);
+            swingarm.position.set(sideX, 0.060, -0.112);
+            swingarm.rotation.x = Math.atan2(0.120, 0.225);
+            rearSuspensionGroup.add(swingarm);
+
+            const cartridgeHousing = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.046, 0.046, 0.036, 20).rotateZ(Math.PI / 2),
+                anodizedBlackMat
+            );
+            cartridgeHousing.position.set(sideX, 0.120, -0.225);
+            rearSuspensionGroup.add(cartridgeHousing);
+
+            const upperMount = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.056, 0.065), anodizedBlackMat);
+            upperMount.position.set(sideX, 0.095, -0.245);
+            rearSuspensionGroup.add(upperMount);
+
+            const capBadge = new THREE.Mesh(
+                new THREE.CircleGeometry(0.042, 20),
+                new THREE.MeshBasicMaterial({ map: capTex })
+            );
+            capBadge.rotation.y = sideX > 0 ? Math.PI / 2 : -Math.PI / 2;
+            capBadge.position.set(sideX + Math.sign(sideX) * 0.019, 0.120, -0.225);
+            rearSuspensionGroup.add(capBadge);
+        });
+
+        const rearCaliper = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.048, 0.042), anodizedBlackMat);
+        rearCaliper.position.set(-0.072, 0.058, -0.068);
+        rearCaliper.rotation.x = -0.35;
+        rearSuspensionGroup.add(rearCaliper);
+
+        // Brett Dualtron Thunder 2 Deck & Stegat Batterichassi
+        const deckGroup = new THREE.Group();
+        deckGroup.position.set(0, 0.076, -0.56);
+        wheeliePivot.add(deckGroup);
+
+        const upperDeckPlate = new THREE.Mesh(new THREE.BoxGeometry(0.305, 0.052, 0.85), matteBlackMat);
+        upperDeckPlate.position.set(0, 0.018, 0);
+        upperDeckPlate.castShadow = true;
+        deckGroup.add(upperDeckPlate);
+
+        const lowerBatteryTray = new THREE.Mesh(new THREE.BoxGeometry(0.245, 0.044, 0.72), anodizedBlackMat);
+        lowerBatteryTray.position.set(0, -0.026, 0.01);
+        lowerBatteryTray.castShadow = true;
+        deckGroup.add(lowerBatteryTray);
+
+        [-0.415, 0.415].forEach(zEnd => {
+            const chamfer = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.052, 0.068), anodizedBlackMat);
+            chamfer.position.set(0, 0.018, zEnd);
+            deckGroup.add(chamfer);
+        });
+
+        const gripPad = new THREE.Mesh(
+            new THREE.BoxGeometry(0.278, 0.012, 0.79),
+            new THREE.MeshStandardMaterial({ map: deckTopTex, roughness: 0.85 })
+        );
+        gripPad.position.set(0, 0.048, 0);
+        deckGroup.add(gripPad);
+
+        [-1, 1].forEach(side => {
+            const sideRail = new THREE.Mesh(
+                new THREE.BoxGeometry(0.014, 0.048, 0.77),
+                new THREE.MeshStandardMaterial({ map: sideDecalTex, roughness: 0.4, metalness: 0.5 })
+            );
+            sideRail.position.set(side * 0.156, 0.016, 0);
+            deckGroup.add(sideRail);
+
+            const ledStrip = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.012, 0.76), accentMat);
+            ledStrip.position.set(side * 0.157, -0.012, 0);
+            deckGroup.add(ledStrip);
+        });
+
+        // Utfällbart sidostöd (kickstand) på vänster bakre sida av chassit
+        const kickstandPivot = new THREE.Group();
+        kickstandPivot.position.set(-0.142, -0.028, 0.24);
+        kickstandPivot.rotation.z = -0.12;
+        deckGroup.add(kickstandPivot);
+
+        const kickstandBracket = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.036, 0.038), anodizedBlackMat);
+        kickstandPivot.add(kickstandBracket);
+
+        const kickstandLeg = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.0085, 0.0075, 0.215, 12),
+            anodizedBlackMat
+        );
+        kickstandLeg.position.set(0, -0.108, 0);
+        kickstandPivot.add(kickstandLeg);
+
+        const kickstandFoot = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.012, 0.032), rubberGripMat);
+        kickstandFoot.position.set(0, -0.218, 0);
+        kickstandPivot.add(kickstandFoot);
+
+        // Signatur Rear Kicktail / Wheelie Bar med ramp upp till den platta topplattan och "D"-emblem
+        const rearKicktailGroup = new THREE.Group();
+        rearKicktailGroup.position.set(0, 0.044, 0.34);
+        deckGroup.add(rearKicktailGroup);
+
+        const rampAngle = 0.50;
+        const rampLength = 0.245;
+        const rampY = 0.062;
+        const rampZ = 0.105;
+
+        [-0.095, 0.095].forEach(sideX => {
+            const baseMount = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.026, 0.072), anodizedBlackMat);
+            baseMount.position.set(sideX, 0.010, -0.008);
+            rearKicktailGroup.add(baseMount);
+
+            const sideSpar = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.028, rampLength), anodizedBlackMat);
+            sideSpar.position.set(sideX, rampY, rampZ);
+            sideSpar.rotation.x = -rampAngle;
+            rearKicktailGroup.add(sideSpar);
+        });
+
+        const rampPlate = new THREE.Mesh(new THREE.BoxGeometry(0.188, 0.018, rampLength), matteBlackMat);
+        rampPlate.position.set(0, rampY + 0.004, rampZ);
+        rampPlate.rotation.x = -rampAngle;
+        rearKicktailGroup.add(rampPlate);
+
+        for (let r = -2; r <= 2; r++) {
+            const ribDist = r * 0.038;
+            const rib = new THREE.Mesh(new THREE.BoxGeometry(0.166, 0.006, 0.012), rubberGripMat);
+            rib.position.set(
+                0,
+                rampY + 0.012 + Math.sin(rampAngle) * ribDist,
+                rampZ + Math.cos(rampAngle) * ribDist
+            );
+            rib.rotation.x = -rampAngle;
+            rearKicktailGroup.add(rib);
+        }
+
+        const topFootPlate = new THREE.Mesh(new THREE.BoxGeometry(0.214, 0.024, 0.145), anodizedBlackMat);
+        topFootPlate.position.set(0, 0.124, 0.258);
+        rearKicktailGroup.add(topFootPlate);
+
+        const topDLogo = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.125, 0.125),
+            new THREE.MeshStandardMaterial({ map: kicktailTex, roughness: 0.45 })
+        );
+        topDLogo.rotation.x = -Math.PI / 2;
+        topDLogo.position.set(0, 0.137, 0.258);
+        rearKicktailGroup.add(topDLogo);
+
+        const rearTailLight = new THREE.Mesh(
+            new THREE.BoxGeometry(0.135, 0.014, 0.012),
+            new THREE.MeshBasicMaterial({ color: 0xef4444 })
+        );
+        rearTailLight.position.set(0, 0.124, 0.332);
+        rearKicktailGroup.add(rearTailLight);
+
+        // Främre svanhals (gooseneck) & fällspärr
+        const neckGroup = new THREE.Group();
+        neckGroup.position.set(0, 0.044, -0.43);
+        deckGroup.add(neckGroup);
+
+        const gussetBeam = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.068, 0.24), matteBlackMat);
+        gussetBeam.position.set(0, 0.068, -0.075);
+        gussetBeam.rotation.x = -0.64;
+        neckGroup.add(gussetBeam);
+
+        [-0.062, 0.062].forEach(sideX => {
+            const sidePlate = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.058, 0.22), anodizedBlackMat);
+            sidePlate.position.set(sideX, 0.075, -0.072);
+            sidePlate.rotation.x = -0.64;
+            neckGroup.add(sidePlate);
+        });
+
+        const stemSocket = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.046, 0.052, 0.125, 20),
+            anodizedBlackMat
+        );
+        stemSocket.position.set(0, 0.145, -0.142);
+        stemSocket.rotation.x = 0.22;
+        neckGroup.add(stemSocket);
+
+        const frontLatchBody = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.056, 0.042), anodizedBlackMat);
+        frontLatchBody.position.set(0, 0.195, -0.175);
+        frontLatchBody.rotation.x = 0.22;
+        neckGroup.add(frontLatchBody);
+
+        const frontLatchLever = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.072, 0.024), matteBlackMat);
+        frontLatchLever.position.set(0, 0.242, -0.192);
+        frontLatchLever.rotation.x = -0.18;
+        neckGroup.add(frontLatchLever);
+
+        // Styrhuvud & Framhjul (svänger med A/D)
+        const steeringPivot = new THREE.Group();
+        steeringPivot.position.set(0, 0.165, -0.148);
+        neckGroup.add(steeringPivot);
+
+        const redFoldingCollar = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.049, 0.049, 0.022, 24),
+            redAnodizedMat
+        );
+        redFoldingCollar.position.set(0, 0.032, -0.006);
+        redFoldingCollar.rotation.x = 0.22;
+        steeringPivot.add(redFoldingCollar);
+
+        const collarLever = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.026, 0.068), redAnodizedMat);
+        collarLever.position.set(0.048, 0.032, 0.014);
+        collarLever.rotation.y = 0.32;
+        steeringPivot.add(collarLever);
+
+        // Räfflad gummibälg ovanför fällkragen
+        for (let b = 0; b < 5; b++) {
+            const bellowsRing = new THREE.Mesh(
+                new THREE.TorusGeometry(0.036, 0.0085, 10, 20).rotateX(Math.PI / 2),
+                rubberGripMat
+            );
+            const bDist = 0.056 + b * 0.016;
+            bellowsRing.position.set(0, Math.cos(0.22) * bDist, -Math.sin(0.22) * bDist);
+            bellowsRing.rotation.x = 0.22;
+            steeringPivot.add(bellowsRing);
+        }
+
+        // Främre C-torsionsfjädring & gaffel (höjd så den har luftgap ovanför framdäcket, utan stänkskärm)
+        const frontForkCrown = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.028, 0.068), anodizedBlackMat);
+        frontForkCrown.position.set(0, -0.018, 0.005);
+        steeringPivot.add(frontForkCrown);
+
+        [-0.084, 0.084].forEach(sideX => {
+            const fCartridge = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.046, 0.046, 0.036, 20).rotateZ(Math.PI / 2),
+                anodizedBlackMat
+            );
+            fCartridge.position.set(sideX, -0.072, -0.020);
+            steeringPivot.add(fCartridge);
+
+            const fCapBadge = new THREE.Mesh(
+                new THREE.CircleGeometry(0.042, 20),
+                new THREE.MeshBasicMaterial({ map: capTex })
+            );
+            fCapBadge.rotation.y = sideX > 0 ? Math.PI / 2 : -Math.PI / 2;
+            fCapBadge.position.set(sideX + Math.sign(sideX) * 0.019, -0.072, -0.020);
+            steeringPivot.add(fCapBadge);
+
+            const fSwingarm = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.040, 0.24), matteBlackMat);
+            fSwingarm.position.set(sideX, -0.152, -0.085);
+            fSwingarm.rotation.x = Math.atan2(0.130, 0.165);
+            steeringPivot.add(fSwingarm);
+        });
+
+        const frontCaliper = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.048, 0.042), anodizedBlackMat);
+        frontCaliper.position.set(-0.072, -0.172, -0.125);
+        frontCaliper.rotation.x = 0.35;
+        steeringPivot.add(frontCaliper);
+
+        const frontWheelMesh = createDualtronWheel();
+        frontWheelMesh.position.set(0, -0.210, -0.165);
+        steeringPivot.add(frontWheelMesh);
+
+        // Styrstång med vertikal "DUALTRON"-text & rund strålkastare
+        const STEM_ANGLE = 0.22;
+        const STEM_LENGTH = 0.88;
+        const stemShaftGroup = new THREE.Group();
+        stemShaftGroup.rotation.x = STEM_ANGLE;
+        steeringPivot.add(stemShaftGroup);
+
+        const mainStemTube = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.027, 0.032, STEM_LENGTH, 20),
+            matteBlackMat
+        );
+        mainStemTube.position.y = STEM_LENGTH / 2 + 0.04;
+        mainStemTube.castShadow = true;
+        stemShaftGroup.add(mainStemTube);
+
+        [-1, 1].forEach(side => {
+            const stemDecal = new THREE.Mesh(
+                new THREE.PlaneGeometry(0.044, 0.56),
+                new THREE.MeshBasicMaterial({ map: stemDecalTex })
+            );
+            stemDecal.rotation.y = side === 1 ? Math.PI / 2 : -Math.PI / 2;
+            stemDecal.position.set(side * 0.0285, 0.49, 0);
+            stemShaftGroup.add(stemDecal);
+        });
+
+        // Rund framåtriktad LED-strålkastare
+        const headlightGroup = new THREE.Group();
+        headlightGroup.position.set(0, 0.22, -0.058);
+        headlightGroup.rotation.x = -STEM_ANGLE;
+        stemShaftGroup.add(headlightGroup);
+
+        const hlBracket = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.030, 0.042), anodizedBlackMat);
+        hlBracket.position.set(0, 0, 0.024);
+        headlightGroup.add(hlBracket);
+
+        const hlHousing = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.038, 0.032, 0.048, 20).rotateX(Math.PI / 2),
+            anodizedBlackMat
+        );
+        headlightGroup.add(hlHousing);
+
+        const hlBezel = new THREE.Mesh(
+            new THREE.TorusGeometry(0.038, 0.004, 10, 20),
+            brushedSilverMat
+        );
+        hlBezel.position.z = -0.024;
+        headlightGroup.add(hlBezel);
+
+        const hlLens = new THREE.Mesh(
+            new THREE.CircleGeometry(0.036, 20),
+            new THREE.MeshBasicMaterial({ color: 0xfef9c3 })
+        );
+        hlLens.rotation.y = Math.PI;
+        hlLens.position.z = -0.025;
+        headlightGroup.add(hlLens);
+
+        // Böjda el- och bromskablar längs nedre och övre styrstången
+        const cableMat = new THREE.MeshStandardMaterial({ color: 0x090a0d, roughness: 0.75 });
+        const lowerCableCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0.024, 0.26, 0.015),
+            new THREE.Vector3(0.035, 0.14, 0.072),
+            new THREE.Vector3(0.032, 0.02, 0.088),
+            new THREE.Vector3(0.025, -0.09, 0.055)
+        ]);
+        const lowerCableMesh = new THREE.Mesh(new THREE.TubeGeometry(lowerCableCurve, 18, 0.007, 8, false), cableMat);
+        stemShaftGroup.add(lowerCableMesh);
+
+        const upperCableCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(-0.08, 0.90, -0.02),
+            new THREE.Vector3(-0.048, 0.82, -0.072),
+            new THREE.Vector3(-0.025, 0.72, -0.068),
+            new THREE.Vector3(-0.015, 0.63, -0.022)
+        ]);
+        const upperCableMesh = new THREE.Mesh(new THREE.TubeGeometry(upperCableCurve, 18, 0.0075, 8, false), cableMat);
+        stemShaftGroup.add(upperCableMesh);
+
+        const upperCableCurve2 = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0.08, 0.90, -0.02),
+            new THREE.Vector3(0.045, 0.83, -0.068),
+            new THREE.Vector3(0.022, 0.74, -0.064),
+            new THREE.Vector3(0.014, 0.65, -0.022)
+        ]);
+        const upperCableMesh2 = new THREE.Mesh(new THREE.TubeGeometry(upperCableCurve2, 18, 0.0065, 8, false), cableMat);
+        stemShaftGroup.add(upperCableMesh2);
+
+        // Styrstam & Brett Dualtron Styre + Minimotors EY3 LCD-display
+        const handlebarAssembly = new THREE.Group();
+        handlebarAssembly.position.set(0, STEM_LENGTH + 0.04, 0);
+        handlebarAssembly.rotation.x = -STEM_ANGLE;
+        stemShaftGroup.add(handlebarAssembly);
+
+        const stemClampBlock = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.052, 0.068), anodizedBlackMat);
+        stemClampBlock.position.set(0, 0.015, -0.014);
+        handlebarAssembly.add(stemClampBlock);
+
+        const barTube = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.016, 0.016, 0.62, 16).rotateZ(Math.PI / 2),
+            matteBlackMat
+        );
+        barTube.position.set(0, 0.028, -0.024);
+        handlebarAssembly.add(barTube);
+
+        // Ergonomiska handtag med låsringar
+        [-0.245, 0.245].forEach(xPos => {
+            const grip = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.020, 0.021, 0.135, 16).rotateZ(Math.PI / 2),
+                rubberGripMat
+            );
+            grip.position.set(xPos, 0.028, -0.024);
+            handlebarAssembly.add(grip);
+
+            const lockRing = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.022, 0.022, 0.011, 16).rotateZ(Math.PI / 2),
+                anodizedBlackMat
+            );
+            lockRing.position.set(xPos - Math.sign(xPos) * 0.066, 0.028, -0.024);
+            handlebarAssembly.add(lockRing);
+
+            const barEnd = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.021, 0.021, 0.010, 16).rotateZ(Math.PI / 2),
+                redAnodizedMat
+            );
+            barEnd.position.set(xPos + Math.sign(xPos) * 0.070, 0.028, -0.024);
+            handlebarAssembly.add(barEnd);
+        });
+
+        // Vänster hydrauliskt bromshandtag (rör sig när S trycks ner)
+        const brakeLeverPivot = new THREE.Group();
+        brakeLeverPivot.position.set(-0.165, 0.026, -0.028);
+        handlebarAssembly.add(brakeLeverPivot);
+
+        const brakeClamp = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.028, 0.036), anodizedBlackMat);
+        brakeLeverPivot.add(brakeClamp);
+
+        const brakeLeverBlade = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.008, 0.016), matteBlackMat);
+        brakeLeverBlade.position.set(-0.055, -0.004, -0.026);
+        brakeLeverBlade.rotation.y = 0.22;
+        brakeLeverPivot.add(brakeLeverBlade);
+
+        // Vänster LED-knappdosa (Eco/Turbo & Single/Dual)
+        const switchBox = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.042, 0.034), anodizedBlackMat);
+        switchBox.position.set(-0.132, 0.032, -0.018);
+        handlebarAssembly.add(switchBox);
+
+        const ecoBtn = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.008, 12).rotateX(Math.PI / 2), redAnodizedMat);
+        ecoBtn.position.set(-0.132, 0.040, 0.001);
+        handlebarAssembly.add(ecoBtn);
+
+        const dualBtn = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.006, 0.006, 0.008, 12).rotateX(Math.PI / 2),
+            new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.3 })
+        );
+        dualBtn.position.set(-0.132, 0.024, 0.001);
+        handlebarAssembly.add(dualBtn);
+
+        // Höger Tumgas (Thumb Throttle)
+        const thumbThrottlePivot = new THREE.Group();
+        thumbThrottlePivot.position.set(0.155, 0.028, -0.024);
+        handlebarAssembly.add(thumbThrottlePivot);
+
+        const throttleRing = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.023, 0.023, 0.022, 16).rotateZ(Math.PI / 2),
+            anodizedBlackMat
+        );
+        thumbThrottlePivot.add(throttleRing);
+
+        const throttlePaddle = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.026, 0.036), matteBlackMat);
+        throttlePaddle.position.set(0.004, -0.016, 0.022);
+        throttlePaddle.rotation.x = 0.35;
+        thumbThrottlePivot.add(throttlePaddle);
+
+        // Minimotors EY3 LCD-display på höger sida av styret (helt fri sikt)
+        const lcdMount = new THREE.Group();
+        lcdMount.position.set(0.125, 0.072, -0.016);
+        lcdMount.rotation.x = -0.45;
+        lcdMount.rotation.y = -0.16;
+        handlebarAssembly.add(lcdMount);
+
+        const lcdClampArm = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.036, 0.018), anodizedBlackMat);
+        lcdClampArm.position.set(0, -0.026, -0.006);
+        lcdMount.add(lcdClampArm);
+
+        const lcdCasing = new THREE.Mesh(new THREE.BoxGeometry(0.092, 0.068, 0.022), anodizedBlackMat);
+        lcdMount.add(lcdCasing);
+
+        const lcdCanvas = document.createElement('canvas');
+        lcdCanvas.width = 256;
+        lcdCanvas.height = 192;
+        const lcdCtx = lcdCanvas.getContext('2d');
+        const lcdTexture = new THREE.CanvasTexture(lcdCanvas);
+
+        const lcdScreenMesh = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.082, 0.058),
+            new THREE.MeshBasicMaterial({ map: lcdTexture })
+        );
+        lcdScreenMesh.position.z = 0.0115;
+        lcdMount.add(lcdScreenMesh);
+
+        function updateLcdDisplay(kmh, modeNum, isWheelie, isOneHander) {
+            lcdCtx.fillStyle = '#020617';
+            lcdCtx.fillRect(0, 0, 256, 192);
+
+            lcdCtx.strokeStyle = '#38bdf8';
+            lcdCtx.lineWidth = 4;
+            lcdCtx.strokeRect(4, 4, 248, 184);
+
+            // Batterimätare (72V 40Ah)
+            lcdCtx.fillStyle = '#1e293b';
+            lcdCtx.fillRect(16, 16, 110, 18);
+            const bars = 5;
+            for (let i = 0; i < bars; i++) {
+                lcdCtx.fillStyle = i < 4 ? '#10b981' : '#38bdf8';
+                lcdCtx.fillRect(20 + i * 21, 19, 17, 12);
+            }
+
+            // Växel / Effektläge (GEAR 1/2/3)
+            lcdCtx.fillStyle = '#ef4444';
+            lcdCtx.fillRect(184, 14, 56, 24);
+            lcdCtx.fillStyle = '#ffffff';
+            lcdCtx.font = '900 15px Inter, sans-serif';
+            lcdCtx.textAlign = 'center';
+            lcdCtx.fillText('GEAR ' + modeNum, 212, 31);
+
+            // Stor digital hastighet (km/h)
+            lcdCtx.fillStyle = '#f8fafc';
+            lcdCtx.font = '900 78px Inter, sans-serif';
+            lcdCtx.textAlign = 'center';
+            lcdCtx.fillText(Math.round(kmh).toString().padStart(2, '0'), 112, 116);
+
+            lcdCtx.fillStyle = '#38bdf8';
+            lcdCtx.font = '800 22px Inter, sans-serif';
+            lcdCtx.fillText('KM/H', 208, 114);
+
+            // Nedre statusrad (72V / STEGRING / ONE-HAND)
+            lcdCtx.fillStyle = '#0f172a';
+            lcdCtx.fillRect(14, 142, 228, 34);
+            lcdCtx.font = '800 15px Inter, sans-serif';
+            lcdCtx.textAlign = 'left';
+            if (isWheelie && isOneHander) {
+                lcdCtx.fillStyle = '#fbbf24';
+                lcdCtx.fillText('WHEELIE + ONE-HAND!', 22, 164);
+            } else if (isWheelie) {
+                lcdCtx.fillStyle = '#c084fc';
+                lcdCtx.fillText('STEGRING AKTIV', 22, 164);
+            } else if (isOneHander) {
+                lcdCtx.fillStyle = '#fbbf24';
+                lcdCtx.fillText('ONE-HANDER!', 22, 164);
+            } else {
+                lcdCtx.fillStyle = '#94a3b8';
+                lcdCtx.fillText('84.0V  DUAL MOTOR', 22, 164);
+            }
+
+            lcdTexture.needsUpdate = true;
+        }
+        updateLcdDisplay(0, '3', false, false);
+
+        // ==========================================
+        // 5. REALISTISK MÄNNISKA (FÖRARE & GÅENDE)
+        // ==========================================
+        const riderRoot = new THREE.Group();
+        scene.add(riderRoot);
+
+        const skinMat = new THREE.MeshStandardMaterial({ color: 0xf1c27d, roughness: 0.65 });
+        const hairMat = new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 0.85 });
+        const hoodieMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.78 });
+        const hoodieAccentMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.65 });
+        const pantsMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.82 });
+        const shoeMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.55 });
+        const soleMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.8 });
+        const gloveMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.7 });
+        const helmetMat = new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.25, metalness: 0.65 });
+        const visorMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.12, metalness: 0.85 });
+
+        const pelvisGroup = new THREE.Group();
+        pelvisGroup.position.set(0, 0.94, 0);
+        riderRoot.add(pelvisGroup);
+
+        const pelvisMesh = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.14, 0.18), pantsMat);
+        pelvisMesh.castShadow = true;
+        pelvisGroup.add(pelvisMesh);
+
+        // Överkropp (Huvtröja)
+        const torsoGroup = new THREE.Group();
+        torsoGroup.position.set(0, 0.07, 0);
+        pelvisGroup.add(torsoGroup);
+
+        const chestMesh = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.44, 0.20), hoodieMat);
+        chestMesh.position.set(0, 0.22, 0);
+        chestMesh.castShadow = true;
+        torsoGroup.add(chestMesh);
+
+        const chestStripe = new THREE.Mesh(new THREE.BoxGeometry(0.326, 0.045, 0.206), hoodieAccentMat);
+        chestStripe.position.set(0, 0.28, 0);
+        torsoGroup.add(chestStripe);
+
+        const hoodMesh = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.14, 0.14), hoodieMat);
+        hoodMesh.position.set(0, 0.42, 0.09);
+        hoodMesh.rotation.x = 0.25;
+        torsoGroup.add(hoodMesh);
+
+        // Huvud & Hjälm (döljs i förstaperson)
+        const headGroup = new THREE.Group();
+        headGroup.position.set(0, 0.47, 0);
+        torsoGroup.add(headGroup);
+
+        const neckMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.058, 0.08, 12), skinMat);
+        neckMesh.position.y = 0.03;
+        headGroup.add(neckMesh);
+
+        const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.105, 20, 20), skinMat);
+        headMesh.position.set(0, 0.13, -0.01);
+        headMesh.scale.set(0.92, 1.08, 1.0);
+        headMesh.castShadow = true;
+        headGroup.add(headMesh);
+
+        // Ansiktsdetaljer (ögon, näsa, hår)
+        [-0.036, 0.036].forEach(ex => {
+            const eye = new THREE.Mesh(
+                new THREE.SphereGeometry(0.012, 8, 8),
+                new THREE.MeshBasicMaterial({ color: 0x0f172a })
+            );
+            eye.position.set(ex, 0.14, -0.102);
+            headGroup.add(eye);
+        });
+
+        const nose = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.028, 8), skinMat);
+        nose.rotation.x = -Math.PI / 2;
+        nose.position.set(0, 0.125, -0.114);
+        headGroup.add(nose);
+
+        const hairCap = new THREE.Mesh(
+            new THREE.SphereGeometry(0.108, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.58),
+            hairMat
+        );
+        hairCap.position.set(0, 0.135, -0.005);
+        hairCap.rotation.x = 0.15;
+        headGroup.add(hairCap);
+
+        // Öppen street-hjälm med visir (synlig när man åker elsparkcykel)
+        const helmetGroup = new THREE.Group();
+        helmetGroup.position.set(0, 0.14, 0);
+        headGroup.add(helmetGroup);
+
+        const helmetShell = new THREE.Mesh(
+            new THREE.SphereGeometry(0.124, 20, 20, 0, Math.PI * 2, 0, Math.PI * 0.68),
+            helmetMat
+        );
+        helmetShell.rotation.x = 0.12;
+        helmetGroup.add(helmetShell);
+
+        const visorMesh = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.122, 0.122, 0.055, 20, 1, true, Math.PI * 0.72, Math.PI * 0.56),
+            visorMat
+        );
+        visorMesh.position.set(0, -0.008, 0);
+        helmetGroup.add(visorMesh);
+
+        // Ledade armar (Axlar -> Överarm -> Armbåge -> Underarm -> Hand + Pekfinger)
+        function createArm(side) {
+            const shoulder = new THREE.Group();
+            shoulder.position.set(side * 0.195, 0.40, 0);
+            torsoGroup.add(shoulder);
+
+            const shoulderBall = new THREE.Mesh(new THREE.SphereGeometry(0.052, 12, 12), hoodieMat);
+            shoulder.add(shoulderBall);
+
+            const upperArm = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.044, 0.038, 0.26, 12),
+                hoodieMat
+            );
+            upperArm.position.y = -0.13;
+            upperArm.castShadow = true;
+            shoulder.add(upperArm);
+
+            const elbow = new THREE.Group();
+            elbow.position.set(0, -0.26, 0);
+            shoulder.add(elbow);
+
+            const elbowJoint = new THREE.Mesh(new THREE.SphereGeometry(0.038, 10, 10), hoodieMat);
+            elbow.add(elbowJoint);
+
+            const forearm = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.036, 0.030, 0.25, 12),
+                hoodieMat
+            );
+            forearm.position.y = -0.125;
+            forearm.castShadow = true;
+            elbow.add(forearm);
+
+            const hand = new THREE.Group();
+            hand.position.set(0, -0.255, 0);
+            elbow.add(hand);
+
+            const palm = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.075, 0.062), gloveMat);
+            palm.position.y = -0.032;
+            hand.add(palm);
+
+            const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.042, 0.022), gloveMat);
+            thumb.position.set(-side * 0.024, -0.028, -0.022);
+            thumb.rotation.z = side * 0.45;
+            hand.add(thumb);
+
+            const indexFingerPivot = new THREE.Group();
+            indexFingerPivot.position.set(0, -0.058, -0.022);
+            hand.add(indexFingerPivot);
+
+            const indexFinger = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.046, 0.016), gloveMat);
+            indexFinger.position.set(0, -0.022, -0.012);
+            indexFinger.rotation.x = -0.45;
+            indexFingerPivot.add(indexFinger);
+
+            return { shoulder, elbow, hand, indexFingerPivot };
+        }
+
+        const leftArm = createArm(-1);
+        const rightArm = createArm(1);
+
+        // Ledade ben (Höft -> Lår -> Knä -> Underben -> Vrist -> Sneaker)
+        function createLeg(side) {
+            const hip = new THREE.Group();
+            hip.position.set(side * 0.095, -0.04, 0);
+            pelvisGroup.add(hip);
+
+            const thigh = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.066, 0.054, 0.42, 12),
+                pantsMat
+            );
+            thigh.position.y = -0.21;
+            thigh.castShadow = true;
+            hip.add(thigh);
+
+            const knee = new THREE.Group();
+            knee.position.set(0, -0.42, 0);
+            hip.add(knee);
+
+            const kneeJoint = new THREE.Mesh(new THREE.SphereGeometry(0.052, 10, 10), pantsMat);
+            knee.add(kneeJoint);
+
+            const shin = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.050, 0.040, 0.40, 12),
+                pantsMat
+            );
+            shin.position.y = -0.20;
+            shin.castShadow = true;
+            knee.add(shin);
+
+            const ankle = new THREE.Group();
+            ankle.position.set(0, -0.40, 0);
+            knee.add(ankle);
+
+            const shoeUpper = new THREE.Mesh(new THREE.BoxGeometry(0.092, 0.065, 0.21), shoeMat);
+            shoeUpper.position.set(0, -0.032, -0.045);
+            shoeUpper.castShadow = true;
+            ankle.add(shoeUpper);
+
+            const shoeSole = new THREE.Mesh(new THREE.BoxGeometry(0.096, 0.022, 0.22), soleMat);
+            shoeSole.position.set(0, -0.068, -0.045);
+            ankle.add(shoeSole);
+
+            const shoeAccent = new THREE.Mesh(new THREE.BoxGeometry(0.094, 0.018, 0.08), hoodieAccentMat);
+            shoeAccent.position.set(0, -0.028, -0.02);
+            ankle.add(shoeAccent);
+
+            return { hip, knee, ankle };
+        }
+
+        const leftLeg = createLeg(-1);
+        const rightLeg = createLeg(1);
+
+        // ==========================================
+        // 6. SPELTILLSTÅND, INMATNING & BUTIKS-UI
+        // ==========================================
+        let isRiding = true;
+        let isCrashed = false;
+        let crashTimer = 0;
+        let crashVel = new THREE.Vector3();
+        let crashSpin = new THREE.Vector3();
+        let scooterTipAngle = 0;
+
+        let scooterPos = new THREE.Vector3(0, 0, 22);
+        let scooterYaw = 0;
+        let speed = 0;
+        let steerAngle = 0;
+        let wheelieAngle = 0;
+        let wheelSpin = 0;
+
+        let playerPos = new THREE.Vector3(-1.1, 0, 22);
+        let playerYaw = 0;
+        let playerVelY = 0;
+        let isGrounded = true;
+        let walkCycle = 0;
+
+        // Kameraläge: 0 = Tredjeperson, 1 = Förstaperson, 2 = Action-kamera
+        let cameraMode = 0;
+        let oneHanderActive = false;
+        let oneHanderHold = false;
+        let oneHanderTimer = 0;
+        let oneHanderBlend = 0;
+
+        const keys = {};
+        const touchState = {
+            left: false,
+            right: false,
+            gas: false,
+            brake: false,
+            wheelie: false
+        };
+
+        const promptEl = document.getElementById('interact-prompt');
+        const toastEl = document.getElementById('toast-banner');
+        let toastTimeout = null;
+
+        function showToast(msg) {
+            if (!toastEl) return;
+            toastEl.textContent = msg;
+            toastEl.style.opacity = '1';
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toastEl.style.opacity = '0';
+            }, 2400);
+        }
+
+        function applyVisualCustomizations() {
+            const stats = getCurrentStats();
+            accentMat.color.setHex(stats.ledColor);
+            accentMat.emissive.setHex(stats.ledColor);
+            const topSpeedEl = document.getElementById('shop-stat-topspeed');
+            if (topSpeedEl) topSpeedEl.textContent = stats.maxKmh + ' km/h';
+        }
+
+        function renderShopModal() {
+            const modelsGrid = document.getElementById('shop-models-grid');
+            const upgradesGrid = document.getElementById('shop-upgrades-grid');
+            if (!modelsGrid || !upgradesGrid) return;
+
+            modelsGrid.innerHTML = '';
+            POWER_TUNES.forEach((tune, idx) => {
+                const selected = state.powerTuneIndex === idx;
+                const card = document.createElement('button');
+                card.className = `p-3.5 rounded-2xl border text-left transition cursor-pointer ${
+                    selected
+                        ? 'bg-rose-500/20 border-rose-400 text-white'
+                        : 'bg-slate-900/80 border-slate-700/70 text-slate-300 hover:border-slate-500'
+                }`;
+                card.innerHTML = `
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs font-black">${tune.name}</span>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${selected ? 'bg-rose-500 text-white' : 'bg-slate-800 text-slate-400'}">0 kr</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 leading-snug mb-2">${tune.desc}</p>
+                    <div class="text-xs font-black text-sky-400">${tune.baseKmh} km/h</div>
+                `;
+                card.onclick = () => {
+                    state.powerTuneIndex = idx;
+                    applyVisualCustomizations();
+                    renderShopModal();
+                    showToast('Valde ' + tune.name);
+                };
+                modelsGrid.appendChild(card);
+            });
+
+            upgradesGrid.innerHTML = '';
+            LED_THEMES.forEach((led, idx) => {
+                const selected = state.ledThemeIndex === idx;
+                const btn = document.createElement('button');
+                btn.className = `p-3 rounded-2xl border text-left flex items-center justify-between transition cursor-pointer ${
+                    selected
+                        ? 'bg-sky-500/20 border-sky-400 text-white'
+                        : 'bg-slate-900/80 border-slate-700/70 text-slate-300 hover:border-slate-500'
+                }`;
+                btn.innerHTML = `
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-4 h-4 rounded-full border border-white/40" style="background:${led.css}"></span>
+                        <span class="text-xs font-bold">${led.name}</span>
+                    </div>
+                    <span class="text-[10px] font-black text-emerald-400">${selected ? 'AKTIV' : '0 kr'}</span>
+                `;
+                btn.onclick = () => {
+                    state.ledThemeIndex = idx;
+                    applyVisualCustomizations();
+                    renderShopModal();
+                    showToast('LED: ' + led.name);
+                };
+                upgradesGrid.appendChild(btn);
+            });
+
+            SUSPENSION_MODES.forEach((susp, idx) => {
+                const selected = state.suspensionIndex === idx;
+                const btn = document.createElement('button');
+                btn.className = `p-3 rounded-2xl border text-left transition cursor-pointer ${
+                    selected
+                        ? 'bg-emerald-500/20 border-emerald-400 text-white'
+                        : 'bg-slate-900/80 border-slate-700/70 text-slate-300 hover:border-slate-500'
+                }`;
+                btn.innerHTML = `
+                    <div class="flex items-center justify-between mb-0.5">
+                        <span class="text-xs font-bold">${susp.name}</span>
+                        <span class="text-[10px] font-black text-emerald-400">${selected ? 'AKTIV' : '0 kr'}</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400">${susp.desc}</p>
+                `;
+                btn.onclick = () => {
+                    state.suspensionIndex = idx;
+                    applyVisualCustomizations();
+                    renderShopModal();
+                    showToast('Fjädring: ' + susp.name);
+                };
+                upgradesGrid.appendChild(btn);
+            });
+        }
+
+        const shopModal = document.getElementById('shop-modal');
+        function openShopModal() {
+            if (!shopModal) return;
+            renderShopModal();
+            shopModal.classList.remove('hidden');
+            shopModal.classList.add('flex');
+        }
+        function closeShopModal() {
+            if (!shopModal) return;
+            shopModal.classList.add('hidden');
+            shopModal.classList.remove('flex');
+        }
+
+        const btnShopClose = document.getElementById('btn-shop-close');
+        if (btnShopClose) btnShopClose.addEventListener('click', closeShopModal);
+
+        function getNearbyStation() {
+            for (const st of shopStations) {
+                const wx = shopGroup.position.x + st.localX;
+                const wz = shopGroup.position.z + st.localZ;
+                const dist = Math.hypot(playerPos.x - wx, playerPos.z - wz);
+                if (dist < 2.2) return st;
+            }
+            return null;
+        }
+
+        function dismountScooter() {
+            if (!isRiding) return;
+            isRiding = false;
+            oneHanderActive = false;
+            oneHanderHold = false;
+            oneHanderTimer = 0;
+            const sideOffsetX = Math.cos(scooterYaw) * -0.75;
+            const sideOffsetZ = -Math.sin(scooterYaw) * -0.75;
+            playerPos.set(scooterPos.x + sideOffsetX, 0, scooterPos.z + sideOffsetZ);
+            playerYaw = scooterYaw;
+            playerVelY = 0;
+            isGrounded = true;
+            showToast('Hoppade av Dualtron Thunder 2');
+        }
+
+        function mountScooter() {
+            if (isRiding) return;
+            if (isCrashed) {
+                isCrashed = false;
+                crashTimer = 0;
+                scooterTipAngle = 0;
+            }
+            isRiding = true;
+            wheelieAngle = 0;
+            playerVelY = 0;
+            isGrounded = true;
+            showToast('Kör Dualtron Thunder 2');
+        }
+
+        function triggerOneHander(isHold) {
+            if (!isRiding || isCrashed) return;
+            oneHanderActive = true;
+            if (isHold) {
+                oneHanderHold = true;
+            } else {
+                oneHanderTimer = 1.45;
+            }
+        }
+
+        function triggerCrash(impactSpeed) {
+            if (isCrashed) return;
+            isCrashed = true;
+            isRiding = false;
+            crashTimer = 2.2;
+            oneHanderActive = false;
+            oneHanderHold = false;
+            oneHanderTimer = 0;
+
+            const launchSpeed = Math.max(8, Math.abs(impactSpeed) * 0.75);
+            const fwdX = -Math.sin(scooterYaw);
+            const fwdZ = -Math.cos(scooterYaw);
+
+            playerPos.set(scooterPos.x, 0.9, scooterPos.z);
+            crashVel.set(
+                fwdX * launchSpeed + (Math.random() - 0.5) * 4,
+                Math.min(11, 4.5 + launchSpeed * 0.16),
+                fwdZ * launchSpeed + (Math.random() - 0.5) * 4
+            );
+            crashSpin.set(
+                (Math.random() - 0.5) * 8,
+                (Math.random() - 0.5) * 6,
+                (Math.random() - 0.5) * 8
+            );
+
+            speed = -impactSpeed * 0.25;
+            wheelieAngle = 0;
+            scooterTipAngle = (Math.random() > 0.5 ? 1 : -1) * 1.32;
+            showToast('Krasch! Du flög av sparkcykeln!');
+        }
+
+        function cycleCamera() {
+            cameraMode = (cameraMode + 1) % 3;
+            const names = ['Tredjeperson', 'Förstaperson', 'Action-kamera'];
+            showToast('Kamera: ' + names[cameraMode]);
+        }
+
+        // Tangentbordshändelser
+        window.addEventListener('keydown', (e) => {
+            const code = e.code;
+            keys[code] = true;
+
+            if (code === 'Escape') {
+                closeShopModal();
+                return;
+            }
+
+            if (shopModal && !shopModal.classList.contains('hidden')) return;
+
+            if (code === 'KeyV') {
+                cycleCamera();
+            } else if (code === 'KeyC') {
+                if (isRiding && !isCrashed && !e.repeat) {
+                    triggerOneHander(true);
+                }
+            } else if (code === 'Space') {
+                e.preventDefault();
+                if (isRiding && !isCrashed) {
+                    dismountScooter();
+                } else if (!isRiding && !isCrashed && isGrounded) {
+                    playerVelY = 6.2;
+                    isGrounded = false;
+                }
+            } else if (code === 'KeyF') {
+                if (isRiding) {
+                    dismountScooter();
+                } else {
+                    const distToScooter = Math.hypot(playerPos.x - scooterPos.x, playerPos.z - scooterPos.z);
+                    const station = getNearbyStation();
+                    if (station) {
+                        openShopModal();
+                    } else if (distToScooter < 2.6) {
+                        mountScooter();
+                    }
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const code = e.code;
+            keys[code] = false;
+            if (code === 'KeyC') {
+                oneHanderHold = false;
+                if (oneHanderTimer <= 0) {
+                    oneHanderActive = false;
+                }
+            }
+        });
+
+        // Mobil- / Touch-knappar
+        function bindHoldButton(id, keyName) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const down = (e) => { e.preventDefault(); touchState[keyName] = true; };
+            const up = (e) => { e.preventDefault(); touchState[keyName] = false; };
+            el.addEventListener('touchstart', down, { passive: false });
+            el.addEventListener('touchend', up, { passive: false });
+            el.addEventListener('mousedown', down);
+            el.addEventListener('mouseup', up);
+            el.addEventListener('mouseleave', up);
+        }
+        bindHoldButton('touch-left', 'left');
+        bindHoldButton('touch-right', 'right');
+        bindHoldButton('touch-gas', 'gas');
+        bindHoldButton('touch-brake', 'brake');
+        bindHoldButton('touch-wheelie', 'wheelie');
+
+        const touchCam = document.getElementById('touch-cam');
+        if (touchCam) touchCam.addEventListener('click', cycleCamera);
+
+        const touchMount = document.getElementById('touch-mount');
+        if (touchMount) {
+            touchMount.addEventListener('click', () => {
+                if (isRiding) {
+                    dismountScooter();
+                } else {
+                    const dist = Math.hypot(playerPos.x - scooterPos.x, playerPos.z - scooterPos.z);
+                    if (getNearbyStation()) openShopModal();
+                    else if (dist < 2.6) mountScooter();
+                }
+            });
+        }
+
+        const touchTrick = document.getElementById('touch-trick');
+        if (touchTrick) touchTrick.addEventListener('click', () => triggerOneHander(false));
+
+        const touchJump = document.getElementById('touch-jump');
+        if (touchJump) {
+            touchJump.addEventListener('click', () => {
+                if (isRiding && !isCrashed) dismountScooter();
+                else if (!isRiding && !isCrashed && isGrounded) {
+                    playerVelY = 6.2;
+                    isGrounded = false;
+                }
+            });
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ==========================================
+        // 7. HUVUDLOOP (FYSIK, ANIMATION & KAMERA)
+        // ==========================================
+        const clock = new THREE.Clock();
+        let lastLcdUpdate = 0;
+
+        function checkCollisionAt(x, z, radius) {
+            // Motorvägsräcken & ändbarriär
+            if (z < 17.5) {
+                if (Math.abs(x) + radius > ROAD_WIDTH / 2 + 0.35) return true;
+                if (z - radius < -2739.5) return true;
+            }
+            // Butiksväggar (shopGroup är vid z = 26, bredd 18, djup 18 -> x in [-9, 9], z in [17, 35])
+            if (z >= 17.0) {
+                if (Math.abs(x) + radius > 8.65) return true;
+                if (z + radius > 34.65) return true;
+                // Podium i butiken
+                for (const st of shopStations) {
+                    const wx = shopGroup.position.x + st.localX;
+                    const wz = shopGroup.position.z + st.localZ;
+                    if (Math.hypot(x - wx, z - wz) < 1.25 + radius) return true;
+                }
+            }
+            return false;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = Math.min(clock.getDelta(), 0.05);
+            const stats = getCurrentStats();
+
+            const gasInput = keys['KeyW'] || keys['ArrowUp'] || touchState.gas;
+            const brakeInput = keys['KeyS'] || keys['ArrowDown'] || touchState.brake;
+            const leftInput = keys['KeyA'] || keys['ArrowLeft'] || touchState.left;
+            const rightInput = keys['KeyD'] || keys['ArrowRight'] || touchState.right;
+            const shiftInput = keys['ShiftLeft'] || keys['ShiftRight'] || touchState.wheelie;
+
+            // 1. KÖRLÄGE PÅ DUALTRON THUNDER 2
+            if (isRiding && !isCrashed) {
+                const maxSpeed = stats.maxSpeedMs;
+                const accelRate = stats.accel;
+
+                if (gasInput) {
+                    speed = Math.min(maxSpeed, speed + accelRate * delta);
+                } else if (brakeInput) {
+                    if (speed > 0.5) {
+                        speed = Math.max(0, speed - 56 * delta);
+                    } else {
+                        speed = Math.max(-6, speed - 18 * delta);
+                    }
+                } else {
+                    // Väldigt lågt rullmotstånd under stegring så man behåller farten
+                    const coastFriction = wheelieAngle > 0.08 ? 0.45 : 3.2;
+                    if (speed > 0) speed = Math.max(0, speed - coastFriction * delta);
+                    else if (speed < 0) speed = Math.min(0, speed + coastFriction * delta);
+                }
+
+                // Styrning
+                const steerInput = (leftInput ? 1 : 0) - (rightInput ? 1 : 0);
+                const speedFactor = Math.max(0.28, 1 - (Math.abs(speed) / maxSpeed) * 0.68);
+                const targetSteer = steerInput * 0.48 * speedFactor * stats.gripBonus;
+                steerAngle = THREE.MathUtils.lerp(steerAngle, targetSteer, Math.min(1, delta * 12));
+
+                if (Math.abs(speed) > 0.15) {
+                    const dirSign = speed >= 0 ? 1 : -1;
+                    scooterYaw += steerAngle * (Math.min(Math.abs(speed), 24) / 11) * dirSign * delta;
+                }
+
+                const nextX = scooterPos.x - Math.sin(scooterYaw) * speed * delta;
+                const nextZ = scooterPos.z - Math.cos(scooterYaw) * speed * delta;
+
+                if (checkCollisionAt(nextX, nextZ, 0.35)) {
+                    if (Math.abs(speed) > 6.5) {
+                        triggerCrash(speed);
+                    } else {
+                        speed = -speed * 0.25;
+                    }
+                } else {
+                    scooterPos.x = nextX;
+                    scooterPos.z = nextZ;
+                }
+
+                // Stegring (Wheelie) med Shift
+                const wantsWheelie = shiftInput && speed > 2.2;
+                const targetWheelie = wantsWheelie ? 0.58 : 0;
+                wheelieAngle = THREE.MathUtils.lerp(wheelieAngle, targetWheelie, Math.min(1, delta * 5.2));
+
+                // Fäll upp sidostödet under körning
+                const kickLerp = Math.min(1, delta * 10);
+                kickstandPivot.rotation.x = THREE.MathUtils.lerp(kickstandPivot.rotation.x, 1.48, kickLerp);
+                kickstandPivot.rotation.z = THREE.MathUtils.lerp(kickstandPivot.rotation.z, 0, kickLerp);
+
+                // One-Hander trick-timer & mjuk armövergång
+                if (oneHanderTimer > 0) {
+                    oneHanderTimer -= delta;
+                    if (oneHanderTimer <= 0 && !oneHanderHold) {
+                        oneHanderActive = false;
+                    }
+                }
+                const targetOneHand = oneHanderActive ? 1 : 0;
+                oneHanderBlend = THREE.MathUtils.lerp(oneHanderBlend, targetOneHand, Math.min(1, delta * 8));
+
+                // Uppdatera elsparkcykelns 3D-transform
+                scooterRoot.position.copy(scooterPos);
+                scooterRoot.rotation.set(0, scooterYaw, 0);
+                wheeliePivot.rotation.x = wheelieAngle;
+                steeringPivot.rotation.y = steerAngle;
+
+                wheelSpin += (speed / 0.175) * delta;
+                rearWheelMesh.rotation.x = -wheelSpin;
+                frontWheelMesh.rotation.x = -wheelSpin;
+
+                // Tumgas & bromshandtag
+                thumbThrottlePivot.rotation.x = gasInput ? 0.42 : 0;
+                brakeLeverPivot.rotation.y = brakeInput ? 0.32 : 0;
+
+                // Placera föraren på decket (följer med wheeliePivot)
+                const localDeckX = 0;
+                const localDeckY = 0.132;
+                const localDeckZ = -0.52;
+                const cosW = Math.cos(wheelieAngle);
+                const sinW = Math.sin(wheelieAngle);
+                const rotatedY = localDeckY * cosW - localDeckZ * sinW;
+                const rotatedZ = localDeckY * sinW + localDeckZ * cosW;
+
+                const worldOffsetX = localDeckX * Math.cos(scooterYaw) + (REAR_AXLE_Z + rotatedZ) * Math.sin(scooterYaw);
+                const worldOffsetZ = -localDeckX * Math.sin(scooterYaw) + (REAR_AXLE_Z + rotatedZ) * Math.cos(scooterYaw);
+
+                riderRoot.position.set(
+                    scooterPos.x + worldOffsetX,
+                    REAR_AXLE_Y + rotatedY,
+                    scooterPos.z + worldOffsetZ
+                );
+                riderRoot.rotation.set(wheelieAngle * 0.72, scooterYaw, -steerAngle * 0.25);
+
+                // Förarens hållning på elsparkcykeln
+                helmetGroup.visible = true;
+                pelvisGroup.position.set(0, 0.90, 0.04);
+                torsoGroup.rotation.set(-0.24 - wheelieAngle * 0.18, -oneHanderBlend * 0.26, 0);
+
+                // Ben (vänster fot fram på decket, höger fot bak mot rampen på wheelie-baren)
+                leftLeg.hip.rotation.set(-0.26, 0.12, 0.04);
+                leftLeg.knee.rotation.set(0.42, 0, 0);
+                leftLeg.ankle.rotation.set(-0.16, 0, 0);
+
+                rightLeg.hip.rotation.set(0.28, -0.14, -0.04);
+                rightLeg.knee.rotation.set(0.38, 0, 0);
+                rightLeg.ankle.rotation.set(-0.45, 0, 0);
+
+                // Höger arm håller alltid om styret & tumgasen
+                rightArm.shoulder.rotation.set(0.95, 0.06, -0.18);
+                rightArm.elbow.rotation.set(0.42, 0, 0);
+                rightArm.hand.rotation.set(-0.35, 0, 0);
+                rightArm.indexFingerPivot.rotation.x = 0.15;
+
+                // Vänster arm (växlar mjukt mellan bromshandtaget och böjd One-Hander-pose)
+                const baseLShoulderX = 0.95;
+                const baseLShoulderY = -0.06;
+                const baseLShoulderZ = 0.18;
+                const baseLElbowX = 0.42;
+
+                const trickLShoulderX = -0.15;
+                const trickLShoulderY = -0.45;
+                const trickLShoulderZ = 0.88;
+                const trickLElbowX = 1.28;
+
+                leftArm.shoulder.rotation.set(
+                    THREE.MathUtils.lerp(baseLShoulderX, trickLShoulderX, oneHanderBlend),
+                    THREE.MathUtils.lerp(baseLShoulderY, trickLShoulderY, oneHanderBlend),
+                    THREE.MathUtils.lerp(baseLShoulderZ, trickLShoulderZ, oneHanderBlend)
+                );
+                leftArm.elbow.rotation.set(
+                    THREE.MathUtils.lerp(baseLElbowX, trickLElbowX, oneHanderBlend),
+                    0,
+                    0
+                );
+                leftArm.hand.rotation.set(
+                    THREE.MathUtils.lerp(-0.35, 0.1, oneHanderBlend),
+                    0,
+                    THREE.MathUtils.lerp(0, -0.25, oneHanderBlend)
+                );
+                leftArm.indexFingerPivot.rotation.x = brakeInput && oneHanderBlend < 0.3 ? -0.45 : 0.25;
+
+                if (promptEl) {
+                    promptEl.style.opacity = '0';
+                }
+            }
+            // 2. KRASCH-LÄGE (FÖRAREN FLYGER GENOM LUFTEN)
+            else if (isCrashed) {
+                crashTimer -= delta;
+                crashVel.y -= 19.6 * delta;
+                playerPos.addScaledVector(crashVel, delta);
+
+                if (playerPos.y <= 0.18) {
+                    playerPos.y = 0.18;
+                    crashVel.y = Math.abs(crashVel.y) * 0.25;
+                    crashVel.x *= 0.82;
+                    crashVel.z *= 0.82;
+                    crashSpin.multiplyScalar(0.75);
+                }
+
+                riderRoot.position.copy(playerPos);
+                riderRoot.rotation.x += crashSpin.x * delta;
+                riderRoot.rotation.y += crashSpin.y * delta;
+                riderRoot.rotation.z += crashSpin.z * delta;
+
+                leftArm.shoulder.rotation.set(0.4, 0, 0.9);
+                rightArm.shoulder.rotation.set(-0.3, 0, -0.9);
+                leftLeg.hip.rotation.set(-0.5, 0, 0.2);
+                rightLeg.hip.rotation.set(0.4, 0, -0.2);
+
+                // Sparkcykeln rullar och tippar omkull
+                speed *= 0.94;
+                scooterPos.x -= Math.sin(scooterYaw) * speed * delta;
+                scooterPos.z -= Math.cos(scooterYaw) * speed * delta;
+                scooterRoot.position.copy(scooterPos);
+                scooterRoot.rotation.set(0, scooterYaw, scooterTipAngle);
+                wheeliePivot.rotation.x = 0;
+
+                if (crashTimer <= 0) {
+                    isCrashed = false;
+                    playerPos.y = 0;
+                    riderRoot.rotation.set(0, playerYaw, 0);
+                }
+
+                if (promptEl) {
+                    promptEl.innerHTML = 'Krasch! Gå fram och tryck <span class="text-sky-400 font-black">[F]</span> för att resa sparkcykeln';
+                    promptEl.style.opacity = '1';
+                }
+            }
+            // 3. TILL FOTS (GÅ, SPRINGA MED SHIFT, HOPPA MED SPACE)
+            else {
+                // Fäll ner sidostödet när sparkcykeln står parkerad
+                const parkKickLerp = Math.min(1, delta * 10);
+                kickstandPivot.rotation.x = THREE.MathUtils.lerp(kickstandPivot.rotation.x, 0, parkKickLerp);
+                kickstandPivot.rotation.z = THREE.MathUtils.lerp(kickstandPivot.rotation.z, -0.12, parkKickLerp);
+
+                // Rulla sparkcykeln till stopp om den fortfarande har fart
+                if (Math.abs(speed) > 0.05) {
+                    speed *= Math.pow(0.2, delta);
+                    const sNextX = scooterPos.x - Math.sin(scooterYaw) * speed * delta;
+                    const sNextZ = scooterPos.z - Math.cos(scooterYaw) * speed * delta;
+                    if (!checkCollisionAt(sNextX, sNextZ, 0.35)) {
+                        scooterPos.x = sNextX;
+                        scooterPos.z = sNextZ;
+                    } else {
+                        speed = 0;
+                    }
+                } else {
+                    speed = 0;
+                }
+                wheelieAngle = THREE.MathUtils.lerp(wheelieAngle, 0, Math.min(1, delta * 8));
+                scooterRoot.position.copy(scooterPos);
+                scooterRoot.rotation.set(0, scooterYaw, scooterTipAngle);
+                wheeliePivot.rotation.x = wheelieAngle;
+
+                // Gå / Springa
+                const turnInput = (leftInput ? 1 : 0) - (rightInput ? 1 : 0);
+                playerYaw += turnInput * 2.6 * delta;
+
+                const moveDir = (gasInput ? 1 : 0) - (brakeInput ? 1 : 0);
+                const isSprinting = shiftInput && moveDir > 0;
+                const moveSpeed = moveDir === 0 ? 0 : (isSprinting ? 8.8 : (moveDir > 0 ? 4.1 : 2.6));
+
+                if (moveDir !== 0) {
+                    const pNextX = playerPos.x - Math.sin(playerYaw) * moveSpeed * Math.sign(moveDir) * delta;
+                    const pNextZ = playerPos.z - Math.cos(playerYaw) * moveSpeed * Math.sign(moveDir) * delta;
+                    if (!checkCollisionAt(pNextX, pNextZ, 0.32)) {
+                        playerPos.x = pNextX;
+                        playerPos.z = pNextZ;
+                    }
+                }
+
+                // Hopp & Gravitation
+                if (!isGrounded) {
+                    playerVelY -= 17.5 * delta;
+                    playerPos.y += playerVelY * delta;
+                    if (playerPos.y <= 0) {
+                        playerPos.y = 0;
+                        playerVelY = 0;
+                        isGrounded = true;
+                    }
+                }
+
+                riderRoot.position.copy(playerPos);
+                riderRoot.rotation.set(0, playerYaw, 0);
+                helmetGroup.visible = false;
+
+                // Gång-, spring- och hoppanimation
+                if (!isGrounded) {
+                    pelvisGroup.position.set(0, 0.94, 0);
+                    torsoGroup.rotation.set(-0.14, 0, 0);
+                    leftLeg.hip.rotation.set(-0.62, 0, 0.05);
+                    leftLeg.knee.rotation.set(0.88, 0, 0);
+                    rightLeg.hip.rotation.set(-0.35, 0, -0.05);
+                    rightLeg.knee.rotation.set(0.65, 0, 0);
+                    leftArm.shoulder.rotation.set(-0.45, 0, 0.45);
+                    leftArm.elbow.rotation.set(0.65, 0, 0);
+                    rightArm.shoulder.rotation.set(-0.45, 0, -0.45);
+                    rightArm.elbow.rotation.set(0.65, 0, 0);
+                } else if (moveDir !== 0) {
+                    const cycleRate = isSprinting ? 14.5 : 8.5;
+                    walkCycle += cycleRate * delta;
+                    const swing = Math.sin(walkCycle);
+                    const strideAmp = isSprinting ? 0.85 : 0.48;
+                    const kneeAmp = isSprinting ? 1.15 : 0.65;
+
+                    pelvisGroup.position.set(0, 0.93 + Math.abs(Math.cos(walkCycle)) * (isSprinting ? 0.045 : 0.02), 0);
+                    torsoGroup.rotation.set(isSprinting ? -0.22 : -0.06, swing * 0.08, 0);
+
+                    leftLeg.hip.rotation.set(swing * strideAmp, 0, 0.03);
+                    leftLeg.knee.rotation.set(Math.max(0, -swing) * kneeAmp + 0.12, 0, 0);
+                    leftLeg.ankle.rotation.set(0, 0, 0);
+
+                    rightLeg.hip.rotation.set(-swing * strideAmp, 0, -0.03);
+                    rightLeg.knee.rotation.set(Math.max(0, swing) * kneeAmp + 0.12, 0, 0);
+                    rightLeg.ankle.rotation.set(0, 0, 0);
+
+                    const armAmp = isSprinting ? 0.95 : 0.48;
+                    leftArm.shoulder.rotation.set(-swing * armAmp, 0, 0.10);
+                    leftArm.elbow.rotation.set(isSprinting ? 1.25 : 0.42, 0, 0);
+                    leftArm.hand.rotation.set(0, 0, 0);
+
+                    rightArm.shoulder.rotation.set(swing * armAmp, 0, -0.10);
+                    rightArm.elbow.rotation.set(isSprinting ? 1.25 : 0.42, 0, 0);
+                    rightArm.hand.rotation.set(0, 0, 0);
+                } else {
+                    const breathe = Math.sin(clock.elapsedTime * 2.2) * 0.015;
+                    pelvisGroup.position.set(0, 0.94, 0);
+                    torsoGroup.rotation.set(breathe, 0, 0);
+                    leftLeg.hip.rotation.set(0, 0, 0.04);
+                    leftLeg.knee.rotation.set(0.06, 0, 0);
+                    leftLeg.ankle.rotation.set(0, 0, 0);
+                    rightLeg.hip.rotation.set(0, 0, -0.04);
+                    rightLeg.knee.rotation.set(0.06, 0, 0);
+                    rightLeg.ankle.rotation.set(0, 0, 0);
+                    leftArm.shoulder.rotation.set(0.04, 0, 0.12 + breathe);
+                    leftArm.elbow.rotation.set(0.18, 0, 0);
+                    leftArm.hand.rotation.set(0, 0, 0);
+                    rightArm.shoulder.rotation.set(0.04, 0, -0.12 - breathe);
+                    rightArm.elbow.rotation.set(0.18, 0, 0);
+                    rightArm.hand.rotation.set(0, 0, 0);
+                }
+
+                // Uppdatera interaktionsprompt
+                if (promptEl) {
+                    const distToScooter = Math.hypot(playerPos.x - scooterPos.x, playerPos.z - scooterPos.z);
+                    const station = getNearbyStation();
+                    if (station) {
+                        promptEl.innerHTML = `Tryck <span class="text-sky-400 font-black">[F]</span> för att öppna <span class="text-rose-400">${station.title}</span>`;
+                        promptEl.style.opacity = '1';
+                    } else if (distToScooter < 2.6) {
+                        promptEl.innerHTML = `Tryck <span class="text-sky-400 font-black">[F]</span> för att hoppa på Dualtron Thunder 2`;
+                        promptEl.style.opacity = '1';
+                    } else {
+                        promptEl.style.opacity = '0';
+                    }
+                }
+            }
+
+            // Uppdatera EY3 LCD-displayen regelbundet
+            if (clock.elapsedTime - lastLcdUpdate > 0.06) {
+                lastLcdUpdate = clock.elapsedTime;
+                updateLcdDisplay(
+                    Math.abs(speed) * 3.6,
+                    stats.modeNum,
+                    wheelieAngle > 0.18,
+                    oneHanderBlend > 0.35
+                );
+            }
+
+            // 4. KAMERASYSTEM (TREDJEPERSON, FÖRSTAPERSON, ACTION)
+            const activeYaw = isRiding ? scooterYaw : playerYaw;
+            const fwdX = -Math.sin(activeYaw);
+            const fwdZ = -Math.cos(activeYaw);
+
+            if (cameraMode === 1 && !isCrashed) {
+                // Förstaperson (både på elsparkcykeln och till fots)
+                headGroup.visible = false;
+                const eyeBase = isRiding ? riderRoot.position : playerPos;
+                const eyeHeight = isRiding ? 1.56 : 1.64;
+                const pitchOffset = isRiding ? wheelieAngle * 0.45 : 0;
+
+                camera.position.set(
+                    eyeBase.x + fwdX * 0.14,
+                    eyeBase.y + eyeHeight,
+                    eyeBase.z + fwdZ * 0.14
+                );
+                camera.lookAt(
+                    eyeBase.x + fwdX * 12,
+                    eyeBase.y + eyeHeight - 1.55 + Math.sin(pitchOffset) * 8,
+                    eyeBase.z + fwdZ * 12
+                );
+            } else {
+                headGroup.visible = true;
+                if (cameraMode === 2 && isRiding && !isCrashed) {
+                    // Låg action-kamera snett bakifrån/sidan
+                    const rightX = Math.cos(scooterYaw);
+                    const rightZ = -Math.sin(scooterYaw);
+                    const targetCamPos = new THREE.Vector3(
+                        scooterPos.x - fwdX * 2.5 + rightX * 1.15,
+                        scooterPos.y + 1.05,
+                        scooterPos.z - fwdZ * 2.5 + rightZ * 1.15
+                    );
+                    camera.position.lerp(targetCamPos, Math.min(1, delta * 10));
+                    camera.lookAt(
+                        scooterPos.x + fwdX * 3.5,
+                        scooterPos.y + 0.95 + wheelieAngle * 0.6,
+                        scooterPos.z + fwdZ * 3.5
+                    );
+                } else {
+                    // Standard tredjepersonskamera
+                    const focusPos = isRiding ? scooterPos : playerPos;
+                    const distBack = isRiding ? 3.2 : 2.8;
+                    const heightUp = isRiding ? 1.85 : 1.75;
+                    const targetCamPos = new THREE.Vector3(
+                        focusPos.x - fwdX * distBack,
+                        focusPos.y + heightUp,
+                        focusPos.z - fwdZ * distBack
+                    );
+                    camera.position.lerp(targetCamPos, Math.min(1, delta * 10));
+                    camera.lookAt(
+                        focusPos.x + fwdX * 4.0,
+                        focusPos.y + 1.15,
+                        focusPos.z + fwdZ * 4.0
+                    );
+                }
+            }
+
+            // Uppdatera skuggljusets position så skuggor alltid följer spelaren längs motorvägen
+            const focusZ = isRiding ? scooterPos.z : playerPos.z;
+            dirLight.position.set(45, 85, focusZ + 35);
+            dirLight.target.position.set(0, 0, focusZ);
+            dirLight.target.updateMatrixWorld();
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function () {
+            try {
+                applyVisualCustomizations();
+                animate();
+            } catch (err) {
+                console.error('Fel vid start av spelet:', err);
+            }
+        };
+    </script>
+</body>
+</html>
